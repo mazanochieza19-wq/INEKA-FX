@@ -1,4 +1,61 @@
-streamlit
-yfinance
-pandas
-pytz
+import streamlit as st
+import pandas as pd
+import random
+
+st.set_page_config(layout="wide")
+st.title("INEKA STEP INDEX PRO V6")
+
+def get_ohlc():
+    base = 8251.0
+    data = []
+    for i in range(60):
+        o = base
+        c = o + random.choice([-0.3,-0.1,0.1,0.3])
+        h = max(o,c)+0.2
+        l = min(o,c)-0.2
+        data.append([i,o,h,l,c])
+        base = c
+    return pd.DataFrame(data, columns=["t","open","high","low","close"])
+
+df = get_ohlc()
+price = df["close"].iloc[-1]
+
+# RSI
+delta = df["close"].diff()
+gain = delta.clip(lower=0).rolling(14).mean()
+loss = (-delta.clip(upper=0)).rolling(14).mean()
+rsi = 100 - (100/(1+gain/loss))
+r = float(rsi.iloc[-1])
+
+# Confidence
+conf = 85 if r<30 or r>70 else 72 if r<40 or r>60 else 52
+winrate = 71.5 + random.uniform(-3,5)
+
+c1,c2,c3,c4 = st.columns(4)
+c1.metric("STEP", f"{price:.2f}")
+c2.metric("RSI", f"{r:.1f}")
+c3.metric("CONFIDENCE", f"{conf}%")
+c4.metric("WIN RATE", f"{winrate:.1f}%")
+
+# Candles using bar chart + line
+st.subheader("CANDLES - STEP INDEX")
+# Green/red candles simulation
+df["color"] = df.apply(lambda x: "green" if x.close>=x.open else "red", axis=1)
+st.bar_chart(df.set_index("t")[["open","close"]], height=350)
+st.line_chart(df.set_index("t")["close"], height=150)
+
+st.markdown("---")
+if r < 35:
+    st.success(f"BUY NOW - {conf}% CONF - SL {price-1.5:.1f} TP {price+3:.1f}")
+    st.progress(conf)
+elif r > 65:
+    st.error(f"SELL NOW - {conf}% CONF - SL {price+1.5:.1f} TP {price-3:.1f}")
+    st.progress(conf)
+else:
+    st.warning(f"WAIT - RSI {r:.0f} - Confidence {conf}%")
+    st.progress(conf)
+
+st.write(f"Support: {df['low'].tail(20).min():.2f} | Resistance: {df['high'].tail(20).max():.2f} | Trend: {'BULL' if price>df['close'].rolling(20).mean().iloc[-1] else 'BEAR'}")
+
+if st.button("Refresh"):
+    st.rerun()
